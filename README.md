@@ -2,6 +2,8 @@
 
 Cloudflare Lava Lamps-inspired tool: use your RTSPS camera feed to generate random numbers.
 
+<img width="673" alt="image" src="https://github.com/user-attachments/assets/535f4fde-79b4-4a34-abeb-915ca4993ead" />
+
 ## Features
 
 - **Modern Web Interface**: Beautiful, responsive design with real-time validation
