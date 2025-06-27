@@ -1,6 +1,6 @@
 import os
-import random
 import hashlib
+import threading
 from pathlib import Path
 from typing import List, Set
 import logging
@@ -22,9 +22,11 @@ MAX_STRINGS_PER_REQUEST = int(os.getenv("MAX_STRINGS_PER_REQUEST", "100"))
 class RandomStringGenerator:
     def __init__(self):
         self.used_files: Set[str] = set()
+        self._lock = threading.Lock()
+        self.wordlist_path = Path(__file__).parent / "wordlist.txt"
     
-    def get_random_snapshot(self) -> Path:
-        """Get a random snapshot file from the source directory."""
+    def get_random_snapshot_deterministic(self) -> Path:
+        """Get snapshot file using deterministic selection (oldest first)."""
         if not RANDOMNESS_SOURCE.exists():
             raise Exception(f"Randomness source directory {RANDOMNESS_SOURCE} does not exist")
         
@@ -36,106 +38,179 @@ class RandomStringGenerator:
         if not available_files:
             raise Exception("No available snapshot files")
         
-        selected_file = random.choice(available_files)
+        # Sort by modification time for deterministic selection (oldest first)
+        available_files.sort(key=lambda x: x.stat().st_mtime)
+        selected_file = available_files[0]
         self.used_files.add(selected_file.name)
         return selected_file
     
-    def generate_random_string(self, length: int, char_types: List[str]) -> str:
-        """Generate a random string using snapshot data as entropy."""
-        snapshot_file = self.get_random_snapshot()
+    def _build_charset(self, char_types: List[str]) -> str:
+        """Build character set from requested types."""
+        charset = ""
+        if "uppercase" in char_types:
+            charset += "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        if "lowercase" in char_types:
+            charset += "abcdefghijklmnopqrstuvwxyz"
+        if "numbers" in char_types:
+            charset += "0123456789"
+        if "special" in char_types:
+            charset += SPECIAL_CHARS
         
-        try:
+        if not charset:
+            raise ValueError("At least one character type must be selected")
+        
+        return charset
+    
+    def generate_entropy_pool(self, required_bytes: int) -> bytes:
+        """Generate sufficient entropy pool for the requested output length."""
+        entropy_pool = b''
+        
+        while len(entropy_pool) < required_bytes:
+            snapshot_file = self.get_random_snapshot_deterministic()
+            
             with open(snapshot_file, 'rb') as f:
                 snapshot_data = f.read()
             
-            # Generate seed from snapshot data
-            hash_obj = hashlib.sha256(snapshot_data)
-            seed = int.from_bytes(hash_obj.digest(), 'big')
-            
-            # Build character set
-            charset = ""
-            if "uppercase" in char_types:
-                charset += "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            if "lowercase" in char_types:
-                charset += "abcdefghijklmnopqrstuvwxyz"
-            if "numbers" in char_types:
-                charset += "0123456789"
-            if "special" in char_types:
-                charset += SPECIAL_CHARS
-            
-            if not charset:
-                raise ValueError("At least one character type must be selected")
-            
-            # Generate random string
-            rng = random.Random(seed)
-            result = ''.join(rng.choice(charset) for _ in range(length))
+            # Hash and append to pool
+            entropy_chunk = hashlib.sha256(snapshot_data).digest()
+            entropy_pool += entropy_chunk
             
             # Delete used snapshot
             snapshot_file.unlink()
             logger.info(f"Used and deleted snapshot: {snapshot_file.name}")
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error generating random string: {e}")
-            raise
+        
+        return entropy_pool[:required_bytes]
+    
+    def generate_random_string(self, length: int, char_types: List[str]) -> str:
+        """Generate a random string using snapshot data as entropy."""
+        with self._lock:
+            try:
+                # Build character set
+                charset = self._build_charset(char_types)
+                
+                # Use single snapshot for strings up to 64 characters (256 bits / 4 bits per char)
+                # For longer strings, use entropy pooling
+                if length <= 64:
+                    snapshot_file = self.get_random_snapshot_deterministic()
+                    
+                    with open(snapshot_file, 'rb') as f:
+                        snapshot_data = f.read()
+                    
+                    # Use full SHA256 output as entropy
+                    entropy_pool = hashlib.sha256(snapshot_data).digest()
+                    
+                    # Delete used snapshot
+                    snapshot_file.unlink()
+                    logger.info(f"Used and deleted snapshot: {snapshot_file.name}")
+                else:
+                    # For very long strings, use entropy pooling
+                    entropy_needed = ((length - 1) // 64 + 1) * 32  # 32 bytes per 64 chars
+                    entropy_pool = self.generate_entropy_pool(entropy_needed)
+                
+                # Generate string using entropy pool
+                result = []
+                for i in range(length):
+                    # Use 4 bits per character (enough for most charsets)
+                    bit_offset = i * 4
+                    byte_index = bit_offset // 8
+                    bit_in_byte = bit_offset % 8
+                    
+                    # Extract 4 bits starting at bit_offset
+                    if byte_index < len(entropy_pool):
+                        if bit_in_byte <= 4:  # Can get 4 bits from this byte
+                            entropy_bits = (entropy_pool[byte_index] >> (4 - bit_in_byte)) & 0xF
+                        else:  # Need bits from two bytes
+                            if byte_index + 1 < len(entropy_pool):
+                                entropy_bits = ((entropy_pool[byte_index] << (bit_in_byte - 4)) | 
+                                              (entropy_pool[byte_index + 1] >> (12 - bit_in_byte))) & 0xF
+                            else:
+                                entropy_bits = (entropy_pool[byte_index] << (bit_in_byte - 4)) & 0xF
+                        
+                        char_index = entropy_bits % len(charset)
+                        result.append(charset[char_index])
+                    else:
+                        # Fallback: use byte-level entropy
+                        entropy_byte = entropy_pool[i % len(entropy_pool)]
+                        char_index = entropy_byte % len(charset)
+                        result.append(charset[char_index])
+                
+                return ''.join(result)
+                
+            except Exception as e:
+                logger.error(f"Error generating random string: {e}")
+                raise
     
     def generate_passphrase(self, word_count: int, capitalize_words: bool, 
                           separate_with_dashes: bool, add_digit: bool) -> str:
         """Generate a passphrase using snapshot data as entropy."""
-        # Load wordlist
-        wordlist_path = Path(__file__).parent / "wordlist.txt"
-        if not wordlist_path.exists():
-            raise Exception("Wordlist file not found")
-        
-        with open(wordlist_path, 'r') as f:
-            words = [line.strip() for line in f if line.strip()]
-        
-        if not words:
-            raise Exception("Empty wordlist")
-        
-        snapshot_file = self.get_random_snapshot()
-        
-        try:
-            with open(snapshot_file, 'rb') as f:
-                snapshot_data = f.read()
-            
-            # Generate seed from snapshot data
-            hash_obj = hashlib.sha256(snapshot_data)
-            seed = int.from_bytes(hash_obj.digest(), 'big')
-            
-            # Generate passphrase
-            rng = random.Random(seed)
-            selected_words = []
-            
-            for i in range(word_count):
-                word = rng.choice(words)
+        with self._lock:
+            try:
+                # Load wordlist
+                if not self.wordlist_path.exists():
+                    raise Exception("Wordlist file not found")
                 
-                # Add digit to one of the words if requested
-                if add_digit and i == rng.randint(0, word_count - 1):
-                    digit = str(rng.randint(0, 9))
-                    word += digit
-                    add_digit = False  # Only add one digit
+                with open(self.wordlist_path, 'r') as f:
+                    words = [line.strip() for line in f if line.strip()]
                 
-                # Capitalize if requested
-                if capitalize_words:
-                    word = word.capitalize()
+                if not words:
+                    raise Exception("Empty wordlist")
                 
-                selected_words.append(word)
-            
-            # Join with appropriate separator
-            separator = '-' if separate_with_dashes else ' '
-            passphrase = separator.join(selected_words)
-            
-            # Delete used snapshot
-            snapshot_file.unlink()
-            logger.info(f"Used and deleted snapshot: {snapshot_file.name}")
-            
-            return passphrase
-            
-        except Exception as e:
-            logger.error(f"Error generating passphrase: {e}")
-            raise
+                # Use single snapshot for typical passphrase lengths (up to 8 words)
+                # SHA256 provides 32 bytes = enough for 8 words * 4 bytes each
+                if word_count <= 8:
+                    snapshot_file = self.get_random_snapshot_deterministic()
+                    
+                    with open(snapshot_file, 'rb') as f:
+                        snapshot_data = f.read()
+                    
+                    # Use full SHA256 output as entropy
+                    entropy_pool = hashlib.sha256(snapshot_data).digest()
+                    
+                    # Delete used snapshot
+                    snapshot_file.unlink()
+                    logger.info(f"Used and deleted snapshot: {snapshot_file.name}")
+                else:
+                    # For very long passphrases, use entropy pooling
+                    entropy_needed = word_count * 4 + (4 if add_digit else 0)
+                    entropy_pool = self.generate_entropy_pool(entropy_needed)
+                
+                selected_words = []
+                entropy_offset = 0
+                digit_position = None
+                
+                # Determine digit position if needed
+                if add_digit:
+                    digit_entropy = entropy_pool[entropy_offset:entropy_offset+2]  # Only need 2 bytes
+                    digit_position = int.from_bytes(digit_entropy, 'big') % word_count
+                    entropy_offset += 2
+                
+                # Select words using entropy pool
+                for i in range(word_count):
+                    word_entropy = entropy_pool[entropy_offset:entropy_offset+3]  # 3 bytes per word
+                    word_index = int.from_bytes(word_entropy, 'big') % len(words)
+                    word = words[word_index]
+                    
+                    # Add digit to designated word
+                    if add_digit and i == digit_position:
+                        # Use 1 byte for digit selection
+                        digit_byte = entropy_pool[entropy_offset + 3] if entropy_offset + 3 < len(entropy_pool) else entropy_pool[-1]
+                        digit = str(digit_byte % 10)
+                        word += digit
+                    
+                    # Capitalize if requested
+                    if capitalize_words:
+                        word = word.capitalize()
+                    
+                    selected_words.append(word)
+                    entropy_offset += 3
+                
+                # Join with appropriate separator
+                separator = '-' if separate_with_dashes else ' '
+                return separator.join(selected_words)
+                
+            except Exception as e:
+                logger.error(f"Error generating passphrase: {e}")
+                raise
 
 generator = RandomStringGenerator()
 
