@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>randomness using camera entropy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1 class="title">random string</h1>
+            <p class="subtitle">32-character string generated using camera entropy</p>
+            
+            {% if generated_string %}
+            <div class="results">
+                <h2 class="results-title">Generated String</h2>
+                <div class="strings-list">
+                    <div class="string-item">
+                        <span class="string-text">{{ generated_string }}</span>
+                        <button class="copy-btn" onclick="copyToClipboard('{{ generated_string }}', this)">Copy</button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if error %}
+            <div class="error">
+                Error: {{ error }}
+            </div>
+            {% endif %}
+
+            <div class="action-buttons">
+                <button onclick="window.location.reload()" class="generate-btn">Generate New String</button>
+                <a href="/" class="back-btn">← Back to Generator</a>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <span id="status" class="status">Checking system status...</span>
+        </div>
+        
+        <div class="footer">
+            <p>Copyright &copy; <span id="currentYear"></span> Morveus - <a href="https://github.com/Morveus/random" target="_blank">GitHub</a></p>
+        </div>
+    </div>
+
+    <script>
+        // Set current year
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+        // Check system health
+        async function checkHealth() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                const statusSpan = document.getElementById('status');
+                
+                if (data.status === 'healthy') {
+                    statusSpan.textContent = `System healthy • ${data.available_snapshots} snapshots available`;
+                    statusSpan.className = 'status healthy';
+                } else {
+                    statusSpan.textContent = 'System unhealthy';
+                    statusSpan.className = 'status unhealthy';
+                }
+            } catch (error) {
+                const statusSpan = document.getElementById('status');
+                statusSpan.textContent = 'Cannot connect to server';
+                statusSpan.className = 'status unhealthy';
+            }
+        }
+
+        function copyToClipboard(text, button) {
+            navigator.clipboard.writeText(text).then(() => {
+                button.textContent = 'Copied!';
+                button.classList.add('copied');
+                
+                setTimeout(() => {
+                    button.textContent = 'Copy';
+                    button.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+
+        checkHealth();
+        setInterval(checkHealth, 500);
+    </script>
+
+    <style>
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+            align-items: center;
+        }
+
+        .back-btn {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: color 0.3s;
+        }
+
+        .back-btn:hover {
+            color: #764ba2;
+        }
+    </style>
+</body>
+</html>

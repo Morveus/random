@@ -143,6 +143,44 @@ generator = RandomStringGenerator()
 def index():
     return render_template('index.html')
 
+@app.route('/string')
+def string_page():
+    """Generate and display a single 32-character random string"""
+    try:
+        # Fixed parameters for string page
+        length = 32
+        char_types = ['uppercase', 'lowercase', 'numbers']
+        
+        # Generate string
+        random_string = generator.generate_random_string(length, char_types)
+        
+        return render_template('string.html', generated_string=random_string)
+        
+    except Exception as e:
+        logger.error(f"Error in string page: {e}")
+        return render_template('string.html', error=str(e))
+
+@app.route('/passphrase')
+def passphrase_page():
+    """Generate and display a 3-word passphrase"""
+    try:
+        # Fixed parameters for passphrase page
+        word_count = 3
+        capitalize_words = True
+        separate_with_dashes = True
+        add_digit = True
+        
+        # Generate passphrase
+        passphrase = generator.generate_passphrase(
+            word_count, capitalize_words, separate_with_dashes, add_digit
+        )
+        
+        return render_template('passphrase.html', generated_passphrase=passphrase)
+        
+    except Exception as e:
+        logger.error(f"Error in passphrase page: {e}")
+        return render_template('passphrase.html', error=str(e))
+
 @app.route('/generate', methods=['POST'])
 def generate():
     try:
