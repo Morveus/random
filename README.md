@@ -172,9 +172,57 @@ docker pull morveus/random-capture:latest
 
 ## API Endpoints
 
+### Web Interface
 - `GET /` - Main web interface
-- `POST /generate` - Generate random strings
+- `POST /generate` - Generate random strings (customizable parameters)
+- `POST /generate-passphrase` - Generate passphrases (customizable parameters)
 - `GET /health` - System health check
+
+### Simple API (Fixed Parameters)
+
+#### `GET /api/string`
+Generates a single 32-character random string using uppercase letters, lowercase letters, and numbers.
+
+**Response:**
+```json
+{
+  "string": "Kj9mP3qR7sT1vW5xY8zA2bC4dE6fG0hI"
+}
+```
+
+**Example:**
+```bash
+curl https://random.morve.us/api/string
+```
+
+#### `GET /api/passphrase`
+Generates a 3-word passphrase with capitalized words, separated by dashes, and includes one random digit.
+
+**Response:**
+```json
+{
+  "passphrase": "Tree2-Ocean-Valley"
+}
+```
+
+**Example:**
+```bash
+curl https://random.morve.us/api/passphrase
+```
+
+### Error Responses
+All endpoints return error responses in this format:
+```json
+{
+  "error": "Error description"
+}
+```
+
+### Notes
+- All API endpoints use the same camera-based entropy source
+- Each request consumes one camera snapshot
+- API endpoints have fixed parameters for simplicity
+- Use the web interface for customizable generation
 
 ## Troubleshooting
 

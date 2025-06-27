@@ -215,5 +215,43 @@ def health():
             'error': str(e)
         }), 500
 
+@app.route('/api/string')
+def api_string():
+    """API endpoint: Generate a single 32-character random string (A-Z, a-z, 0-9)"""
+    try:
+        # Fixed parameters for API endpoint
+        length = 32
+        char_types = ['uppercase', 'lowercase', 'numbers']
+        
+        # Generate string
+        random_string = generator.generate_random_string(length, char_types)
+        
+        return jsonify({'string': random_string})
+        
+    except Exception as e:
+        logger.error(f"Error in API string endpoint: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/passphrase')
+def api_passphrase():
+    """API endpoint: Generate a 3-word passphrase, capitalized, with dashes and one digit"""
+    try:
+        # Fixed parameters for API endpoint
+        word_count = 3
+        capitalize_words = True
+        separate_with_dashes = True
+        add_digit = True
+        
+        # Generate passphrase
+        passphrase = generator.generate_passphrase(
+            word_count, capitalize_words, separate_with_dashes, add_digit
+        )
+        
+        return jsonify({'passphrase': passphrase})
+        
+    except Exception as e:
+        logger.error(f"Error in API passphrase endpoint: {e}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=APP_PORT, debug=False)
