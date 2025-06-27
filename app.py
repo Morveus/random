@@ -25,6 +25,17 @@ class RandomStringGenerator:
         self._lock = threading.Lock()
         self.wordlist_path = Path(__file__).parent / "wordlist.txt"
     
+    def get_available_entropy_count(self) -> int:
+        """Get count of available entropy sources."""
+        if not RANDOMNESS_SOURCE.exists():
+            return 0
+        
+        available_files = [
+            f for f in RANDOMNESS_SOURCE.glob("*") 
+            if f.is_file() and f.name not in self.used_files
+        ]
+        return len(available_files)
+
     def get_random_snapshot_deterministic(self) -> Path:
         """Get snapshot file using deterministic selection (oldest first)."""
         if not RANDOMNESS_SOURCE.exists():
@@ -36,7 +47,11 @@ class RandomStringGenerator:
         ]
         
         if not available_files:
-            raise Exception("No available snapshot files")
+            raise Exception("No available snapshot files - entropy pool exhausted")
+        
+        # Warn if entropy is running low
+        if len(available_files) <= 5:
+            logger.warning(f"Low entropy warning: only {len(available_files)} snapshots remaining")
         
         # Sort by modification time for deterministic selection (oldest first)
         available_files.sort(key=lambda x: x.stat().st_mtime)
@@ -81,16 +96,60 @@ class RandomStringGenerator:
         
         return entropy_pool[:required_bytes]
     
+    def _secure_random_choice(self, entropy_pool: bytes, offset: int, choices: int) -> tuple[int, int]:
+        """
+        Select a random index from 0 to choices-1 using rejection sampling to avoid modulo bias.
+        Returns (selected_index, bytes_consumed).
+        """
+        if choices <= 1:
+            return 0, 0
+        
+        # Calculate how many bits we need
+        bits_needed = (choices - 1).bit_length()
+        bytes_needed = (bits_needed + 7) // 8
+        
+        max_attempts = 100  # Prevent infinite loops
+        for attempt in range(max_attempts):
+            if offset + bytes_needed > len(entropy_pool):
+                # Not enough entropy remaining, use what we have with modulo (fallback)
+                remaining_bytes = len(entropy_pool) - offset
+                if remaining_bytes > 0:
+                    value = int.from_bytes(entropy_pool[offset:offset + remaining_bytes], 'big')
+                    return value % choices, remaining_bytes
+                else:
+                    return 0, 0
+            
+            # Extract the needed bytes
+            value = int.from_bytes(entropy_pool[offset:offset + bytes_needed], 'big')
+            
+            # Check if value is in valid range (rejection sampling)
+            max_valid = (2 ** (bytes_needed * 8)) // choices * choices
+            if value < max_valid:
+                return value % choices, bytes_needed
+            
+            # Rejected, try next bytes
+            offset += 1
+            if offset >= len(entropy_pool):
+                break
+        
+        # Fallback if we couldn't find a valid value
+        final_byte = entropy_pool[min(offset, len(entropy_pool) - 1)]
+        return final_byte % choices, 1
+
     def generate_random_string(self, length: int, char_types: List[str]) -> str:
         """Generate a random string using snapshot data as entropy."""
         with self._lock:
             try:
                 # Build character set
                 charset = self._build_charset(char_types)
+                charset_size = len(charset)
                 
-                # Use single snapshot for strings up to 64 characters (256 bits / 4 bits per char)
-                # For longer strings, use entropy pooling
-                if length <= 64:
+                # Calculate entropy needed (more generous allocation)
+                bytes_per_char = max(2, (charset_size - 1).bit_length() // 4)  # At least 2 bytes per char
+                entropy_needed = length * bytes_per_char
+                
+                # Use single snapshot for moderate strings, entropy pooling for very long ones
+                if entropy_needed <= 32:  # Single SHA256 output
                     snapshot_file = self.get_random_snapshot_deterministic()
                     
                     with open(snapshot_file, 'rb') as f:
@@ -104,35 +163,22 @@ class RandomStringGenerator:
                     logger.info(f"Used and deleted snapshot: {snapshot_file.name}")
                 else:
                     # For very long strings, use entropy pooling
-                    entropy_needed = ((length - 1) // 64 + 1) * 32  # 32 bytes per 64 chars
                     entropy_pool = self.generate_entropy_pool(entropy_needed)
                 
-                # Generate string using entropy pool
+                # Generate string using secure selection
                 result = []
+                entropy_offset = 0
+                
                 for i in range(length):
-                    # Use 4 bits per character (enough for most charsets)
-                    bit_offset = i * 4
-                    byte_index = bit_offset // 8
-                    bit_in_byte = bit_offset % 8
+                    char_index, bytes_consumed = self._secure_random_choice(
+                        entropy_pool, entropy_offset, charset_size
+                    )
+                    result.append(charset[char_index])
+                    entropy_offset += bytes_consumed
                     
-                    # Extract 4 bits starting at bit_offset
-                    if byte_index < len(entropy_pool):
-                        if bit_in_byte <= 4:  # Can get 4 bits from this byte
-                            entropy_bits = (entropy_pool[byte_index] >> (4 - bit_in_byte)) & 0xF
-                        else:  # Need bits from two bytes
-                            if byte_index + 1 < len(entropy_pool):
-                                entropy_bits = ((entropy_pool[byte_index] << (bit_in_byte - 4)) | 
-                                              (entropy_pool[byte_index + 1] >> (12 - bit_in_byte))) & 0xF
-                            else:
-                                entropy_bits = (entropy_pool[byte_index] << (bit_in_byte - 4)) & 0xF
-                        
-                        char_index = entropy_bits % len(charset)
-                        result.append(charset[char_index])
-                    else:
-                        # Fallback: use byte-level entropy
-                        entropy_byte = entropy_pool[i % len(entropy_pool)]
-                        char_index = entropy_byte % len(charset)
-                        result.append(charset[char_index])
+                    # Ensure we don't run out of entropy
+                    if entropy_offset >= len(entropy_pool):
+                        break
                 
                 return ''.join(result)
                 
@@ -155,9 +201,14 @@ class RandomStringGenerator:
                 if not words:
                     raise Exception("Empty wordlist")
                 
-                # Use single snapshot for typical passphrase lengths (up to 8 words)
-                # SHA256 provides 32 bytes = enough for 8 words * 4 bytes each
-                if word_count <= 8:
+                wordlist_size = len(words)
+                
+                # Calculate entropy needed (more generous allocation)
+                bytes_per_word = max(3, (wordlist_size - 1).bit_length() // 4)  # At least 3 bytes per word
+                entropy_needed = word_count * bytes_per_word + (4 if add_digit else 0)
+                
+                # Use single snapshot for moderate passphrases, entropy pooling for very long ones
+                if entropy_needed <= 32:  # Single SHA256 output
                     snapshot_file = self.get_random_snapshot_deterministic()
                     
                     with open(snapshot_file, 'rb') as f:
@@ -171,38 +222,45 @@ class RandomStringGenerator:
                     logger.info(f"Used and deleted snapshot: {snapshot_file.name}")
                 else:
                     # For very long passphrases, use entropy pooling
-                    entropy_needed = word_count * 4 + (4 if add_digit else 0)
                     entropy_pool = self.generate_entropy_pool(entropy_needed)
                 
                 selected_words = []
                 entropy_offset = 0
                 digit_position = None
                 
-                # Determine digit position if needed
+                # Determine digit position if needed using secure selection
                 if add_digit:
-                    digit_entropy = entropy_pool[entropy_offset:entropy_offset+2]  # Only need 2 bytes
-                    digit_position = int.from_bytes(digit_entropy, 'big') % word_count
-                    entropy_offset += 2
+                    digit_position, bytes_consumed = self._secure_random_choice(
+                        entropy_pool, entropy_offset, word_count
+                    )
+                    entropy_offset += bytes_consumed
                 
-                # Select words using entropy pool
+                # Select words using secure selection
                 for i in range(word_count):
-                    word_entropy = entropy_pool[entropy_offset:entropy_offset+3]  # 3 bytes per word
-                    word_index = int.from_bytes(word_entropy, 'big') % len(words)
+                    word_index, bytes_consumed = self._secure_random_choice(
+                        entropy_pool, entropy_offset, wordlist_size
+                    )
                     word = words[word_index]
+                    entropy_offset += bytes_consumed
                     
                     # Add digit to designated word
                     if add_digit and i == digit_position:
-                        # Use 1 byte for digit selection
-                        digit_byte = entropy_pool[entropy_offset + 3] if entropy_offset + 3 < len(entropy_pool) else entropy_pool[-1]
-                        digit = str(digit_byte % 10)
-                        word += digit
+                        # Use secure selection for digit (0-9)
+                        digit, digit_bytes_consumed = self._secure_random_choice(
+                            entropy_pool, entropy_offset, 10
+                        )
+                        word += str(digit)
+                        entropy_offset += digit_bytes_consumed
                     
                     # Capitalize if requested
                     if capitalize_words:
                         word = word.capitalize()
                     
                     selected_words.append(word)
-                    entropy_offset += 3
+                    
+                    # Ensure we don't run out of entropy
+                    if entropy_offset >= len(entropy_pool):
+                        break
                 
                 # Join with appropriate separator
                 separator = '-' if separate_with_dashes else ' '
@@ -317,10 +375,20 @@ def generate_passphrase():
 @app.route('/health')
 def health():
     try:
-        snapshot_count = len(list(RANDOMNESS_SOURCE.glob("*")))
+        available_snapshots = generator.get_available_entropy_count()
+        total_snapshots = len(list(RANDOMNESS_SOURCE.glob("*")))
+        
+        status = 'healthy'
+        if available_snapshots == 0:
+            status = 'critical'
+        elif available_snapshots <= 5:
+            status = 'warning'
+        
         return jsonify({
-            'status': 'healthy',
-            'available_snapshots': snapshot_count
+            'status': status,
+            'available_snapshots': available_snapshots,
+            'total_snapshots': total_snapshots,
+            'used_snapshots': len(generator.used_files)
         })
     except Exception as e:
         return jsonify({
