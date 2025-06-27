@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "${APP_PORT:-5000}:5000"
+    volumes:
+      - randomness_data:/randomness-source
+    env_file:
+      - .env
+    depends_on:
+      - capture
+    restart: unless-stopped
+    networks:
+      - random_network
+
+  capture:
+    build:
+      context: .
+      dockerfile: Dockerfile.capture
+    volumes:
+      - randomness_data:/randomness-source
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - random_network
+
+volumes:
+  randomness_data:
+    driver: local
+
+networks:
+  random_network:
+    driver: bridge
