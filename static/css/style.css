@@ -131,6 +131,30 @@ label {
     width: 100%;
 }
 
+.count-display {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #667eea;
+    text-align: center;
+    margin: 15px 0;
+    text-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.count-slider-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 20px 0;
+}
+
+.count-slider-container .slider {
+    max-width: 300px;
+}
+
 .checkbox-group {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

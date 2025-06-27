@@ -10,7 +10,7 @@
     <div class="container">
         <div class="card">
             <h1 class="title">random</h1>
-            <p class="subtitle">enerate random strings using camera entropy</p>
+            <p class="subtitle">generate random strings using camera entropy</p>
             
             <form id="generatorForm" class="form">
                 <div class="form-group">
@@ -49,7 +49,11 @@
 
                 <div class="form-group">
                     <label for="count">Number of Strings</label>
-                    <input type="number" id="count" min="1" max="100" value="1" class="number-input full-width">
+                    <div class="count-display" id="countDisplay">1</div>
+                    <div class="count-slider-container">
+                        <input type="range" id="countSlider" min="1" max="100" value="1" class="slider">
+                    </div>
+                    <input type="number" id="count" min="1" max="100" value="1" class="number-input hidden">
                 </div>
 
                 <button type="submit" class="generate-btn">Generate Random Strings</button>

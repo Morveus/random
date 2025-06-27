@@ -2,18 +2,32 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('generatorForm');
     const lengthSlider = document.getElementById('lengthSlider');
     const lengthInput = document.getElementById('lengthInput');
+    const countSlider = document.getElementById('countSlider');
+    const countInput = document.getElementById('count');
+    const countDisplay = document.getElementById('countDisplay');
     const resultsDiv = document.getElementById('results');
     const stringsList = document.getElementById('stringsList');
     const errorDiv = document.getElementById('error');
     const statusSpan = document.getElementById('status');
 
-    // Sync slider and input
+    // Sync slider and input for length
     lengthSlider.addEventListener('input', function() {
         lengthInput.value = this.value;
     });
 
     lengthInput.addEventListener('input', function() {
         lengthSlider.value = this.value;
+    });
+
+    // Sync slider and input for count
+    countSlider.addEventListener('input', function() {
+        countInput.value = this.value;
+        countDisplay.textContent = this.value;
+    });
+
+    countInput.addEventListener('input', function() {
+        countSlider.value = this.value;
+        countDisplay.textContent = this.value;
     });
 
     // Check system health
