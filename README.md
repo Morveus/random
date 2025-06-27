@@ -1,10 +1,14 @@
-# Random String Generator
+# RANDOM
 
-Cloudflare Lava Lamps-inspired tool: use your RTSPS camera feed to generate random numbers.
+Cloudflare Lava Lamps-inspired RNG: use your RTSPS camera feed to generate random numbers using:
+- lava lamps 🌋
+- plasma lamps ⚡
+- fountains 🚰
+- your ant colony 🐜
 
 ⚠️ This is for fun, do not use in production, thank you
 
-<img width="673" alt="image" src="https://github.com/user-attachments/assets/535f4fde-79b4-4a34-abeb-915ca4993ead" />
+<img width="685" alt="image" src="https://github.com/user-attachments/assets/4fba95b3-6714-4653-8d13-a3fed42bbfa3" />
 
 ## Features
 
