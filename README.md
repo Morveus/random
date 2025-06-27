@@ -196,7 +196,7 @@ Generates a single 32-character random string using uppercase letters, lowercase
 
 **Example:**
 ```bash
-curl https://random.morve.us/api/string
+curl https://yourserver/api/string
 ```
 
 #### `GET /api/passphrase`
@@ -211,7 +211,7 @@ Generates a 3-word passphrase with capitalized words, separated by dashes, and i
 
 **Example:**
 ```bash
-curl https://random.morve.us/api/passphrase
+curl https://yourserver/api/passphrase
 ```
 
 ### Error Responses
