@@ -243,7 +243,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
             
             if (data.status === 'healthy') {
-                const maxAllowed = Math.min(data.available_snapshots, 100);
+                const maxAllowed = Math.min(data.available_snapshots, 10);
                 statusSpan.textContent = `System healthy • ${data.available_snapshots} snapshots available • max ${maxAllowed} strings`;
                 statusSpan.className = 'status healthy';
                 
@@ -260,7 +260,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateMaxStringCount(availableSnapshots) {
-        const maxCount = Math.min(availableSnapshots, 100); // Still respect the original 100 limit
+        const maxCount = Math.min(availableSnapshots, 10); // Enforce 10 string limit
         
         // Update slider max
         countSlider.max = maxCount;

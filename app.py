@@ -17,7 +17,7 @@ RANDOMNESS_SOURCE = Path("/randomness-source")
 APP_PORT = int(os.getenv("APP_PORT", "5000"))
 SPECIAL_CHARS = os.getenv("SPECIAL_CHARS", "!@#$%^&*()_+-=[]{}|;:,.<>?")
 MAX_STRING_LENGTH = int(os.getenv("MAX_STRING_LENGTH", "256"))
-MAX_STRINGS_PER_REQUEST = int(os.getenv("MAX_STRINGS_PER_REQUEST", "100"))
+MAX_STRINGS_PER_REQUEST = int(os.getenv("MAX_STRINGS_PER_REQUEST", "10"))
 
 class RandomStringGenerator:
     def __init__(self):
@@ -326,12 +326,14 @@ def generate():
         if length < 1 or length > MAX_STRING_LENGTH:
             return jsonify({'error': f'Length must be between 1 and {MAX_STRING_LENGTH}'}), 400
         
-        # Check available snapshots for dynamic limit
-        available_snapshots = len(list(RANDOMNESS_SOURCE.glob("*")))
-        max_allowed = min(available_snapshots, MAX_STRINGS_PER_REQUEST)
+        # Enforce maximum limit
+        if count < 1 or count > MAX_STRINGS_PER_REQUEST:
+            return jsonify({'error': f'Count must be between 1 and {MAX_STRINGS_PER_REQUEST}'}), 400
         
-        if count < 1 or count > max_allowed:
-            return jsonify({'error': f'Count must be between 1 and {max_allowed} (limited by available snapshots)'}), 400
+        # Check if we have enough snapshots
+        available_snapshots = len(list(RANDOMNESS_SOURCE.glob("*")))
+        if count > available_snapshots:
+            return jsonify({'error': f'Not enough entropy available. Requested {count}, but only {available_snapshots} snapshots available'}), 400
         
         if not char_types:
             return jsonify({'error': 'At least one character type must be selected'}), 400
