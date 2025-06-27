@@ -12,7 +12,12 @@
             <h1 class="title">random</h1>
             <p class="subtitle">generate random strings using camera entropy</p>
             
-            <form id="generatorForm" class="form">
+            <div class="tabs">
+                <button type="button" class="tab-button active" data-tab="strings">Random Strings</button>
+                <button type="button" class="tab-button" data-tab="passphrase">Passphrase</button>
+            </div>
+            
+            <form id="generatorForm" class="form tab-content active" data-tab="strings">
                 <div class="form-group">
                     <label for="length">String Length</label>
                     <div class="slider-container">
@@ -59,6 +64,40 @@
                 <button type="submit" class="generate-btn">Generate Random Strings</button>
             </form>
 
+            <form id="passphraseForm" class="form tab-content" data-tab="passphrase">
+                <div class="form-group">
+                    <label for="wordCount">Number of Words</label>
+                    <div class="count-display" id="wordCountDisplay">4</div>
+                    <div class="count-slider-container">
+                        <input type="range" id="wordCountSlider" min="3" max="12" value="4" class="slider">
+                    </div>
+                    <input type="number" id="wordCount" min="3" max="12" value="4" class="number-input hidden">
+                </div>
+
+                <div class="form-group">
+                    <label>Passphrase Options</label>
+                    <div class="checkbox-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="capitalizeWords" checked>
+                            <span class="checkbox-custom"></span>
+                            Capitalize Each Word
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="separateWithDashes">
+                            <span class="checkbox-custom"></span>
+                            Separate with Dashes
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="addDigit">
+                            <span class="checkbox-custom"></span>
+                            Add Random Digit
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" class="generate-btn">Generate Passphrase</button>
+            </form>
+
             <div id="results" class="results hidden">
                 <h2 class="results-title">Generated Strings</h2>
                 <div id="stringsList" class="strings-list"></div>
@@ -69,6 +108,10 @@
 
         <div class="status-bar">
             <span id="status" class="status">Checking system status...</span>
+        </div>
+        
+        <div class="footer">
+            <p>Copyright &copy; <span id="currentYear"></span> Morveus - <a href="https://github.com/Morveus/random" target="_blank">GitHub</a></p>
         </div>
     </div>
 

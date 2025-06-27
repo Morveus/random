@@ -79,6 +79,63 @@ class RandomStringGenerator:
         except Exception as e:
             logger.error(f"Error generating random string: {e}")
             raise
+    
+    def generate_passphrase(self, word_count: int, capitalize_words: bool, 
+                          separate_with_dashes: bool, add_digit: bool) -> str:
+        """Generate a passphrase using snapshot data as entropy."""
+        # Load wordlist
+        wordlist_path = Path(__file__).parent / "wordlist.txt"
+        if not wordlist_path.exists():
+            raise Exception("Wordlist file not found")
+        
+        with open(wordlist_path, 'r') as f:
+            words = [line.strip() for line in f if line.strip()]
+        
+        if not words:
+            raise Exception("Empty wordlist")
+        
+        snapshot_file = self.get_random_snapshot()
+        
+        try:
+            with open(snapshot_file, 'rb') as f:
+                snapshot_data = f.read()
+            
+            # Generate seed from snapshot data
+            hash_obj = hashlib.sha256(snapshot_data)
+            seed = int.from_bytes(hash_obj.digest(), 'big')
+            
+            # Generate passphrase
+            rng = random.Random(seed)
+            selected_words = []
+            
+            for i in range(word_count):
+                word = rng.choice(words)
+                
+                # Add digit to one of the words if requested
+                if add_digit and i == rng.randint(0, word_count - 1):
+                    digit = str(rng.randint(0, 9))
+                    word += digit
+                    add_digit = False  # Only add one digit
+                
+                # Capitalize if requested
+                if capitalize_words:
+                    word = word.capitalize()
+                
+                selected_words.append(word)
+            
+            # Join with appropriate separator
+            separator = '-' if separate_with_dashes else ' '
+            passphrase = separator.join(selected_words)
+            
+            # Delete used snapshot
+            snapshot_file.unlink()
+            logger.info(f"Used and deleted snapshot: {snapshot_file.name}")
+            
+            return passphrase
+            
+        except Exception as e:
+            logger.error(f"Error generating passphrase: {e}")
+            raise
 
 generator = RandomStringGenerator()
 
@@ -98,8 +155,12 @@ def generate():
         if length < 1 or length > MAX_STRING_LENGTH:
             return jsonify({'error': f'Length must be between 1 and {MAX_STRING_LENGTH}'}), 400
         
-        if count < 1 or count > MAX_STRINGS_PER_REQUEST:
-            return jsonify({'error': f'Count must be between 1 and {MAX_STRINGS_PER_REQUEST}'}), 400
+        # Check available snapshots for dynamic limit
+        available_snapshots = len(list(RANDOMNESS_SOURCE.glob("*")))
+        max_allowed = min(available_snapshots, MAX_STRINGS_PER_REQUEST)
+        
+        if count < 1 or count > max_allowed:
+            return jsonify({'error': f'Count must be between 1 and {max_allowed} (limited by available snapshots)'}), 400
         
         if not char_types:
             return jsonify({'error': 'At least one character type must be selected'}), 400
@@ -114,6 +175,30 @@ def generate():
         
     except Exception as e:
         logger.error(f"Error in generate endpoint: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/generate-passphrase', methods=['POST'])
+def generate_passphrase():
+    try:
+        data = request.json
+        word_count = int(data.get('wordCount', 4))
+        capitalize_words = bool(data.get('capitalizeWords', True))
+        separate_with_dashes = bool(data.get('separateWithDashes', False))
+        add_digit = bool(data.get('addDigit', False))
+        
+        # Validate inputs
+        if word_count < 3 or word_count > 12:
+            return jsonify({'error': 'Word count must be between 3 and 12'}), 400
+        
+        # Generate passphrase
+        passphrase = generator.generate_passphrase(
+            word_count, capitalize_words, separate_with_dashes, add_digit
+        )
+        
+        return jsonify({'passphrase': passphrase})
+        
+    except Exception as e:
+        logger.error(f"Error in generate-passphrase endpoint: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health')
