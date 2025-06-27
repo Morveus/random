@@ -1,6 +1,10 @@
 # RANDOM
 
-Cloudflare Lava Lamps-inspired tool: use your RTSPS camera feed to generate random numbers.
+Cloudflare Lava Lamps-inspired RNG: use your RTSPS camera feed to generate random numbers using:
+- lava lamps 🌋
+- plasma lamps ⚡
+- fountains 🚰
+- your ant colony 🐜
 
 ⚠️ This is for fun, do not use in production, thank you
 
