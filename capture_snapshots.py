@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 RTSP_URL = os.getenv("RTSP_URL", "rtsp://admin:password@192.168.1.100:554/stream")
 SNAPSHOT_INTERVAL = int(os.getenv("SNAPSHOT_INTERVAL", "5"))
-MAX_SNAPSHOTS = int(os.getenv("MAX_SNAPSHOTS", "100"))
+MAX_SNAPSHOTS = int(os.getenv("MAX_SNAPSHOTS", "5000"))
 RANDOMNESS_SOURCE = Path("/randomness-source")
 
 class SnapshotCapture:
