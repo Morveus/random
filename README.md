@@ -1,6 +1,6 @@
 # Random String Generator
 
-A containerized Python web application that generates cryptographically random strings using camera snapshots as entropy sources. Features a modern, beautiful web interface for generating random strings with customizable parameters.
+Cloudflare Lava Lamps-inspired tool: use your RTSPS camera feed to generate random numbers.
 
 ## Features
 
@@ -15,10 +15,63 @@ A containerized Python web application that generates cryptographically random s
 
 ## Quick Start
 
+### Option 1: Using Docker Hub Images (Recommended)
+
+1. **Create docker-compose.yml**:
+   ```yaml
+   version: '3.8'
+   
+   services:
+     web:
+       image: morveus/random-web:latest
+       ports:
+         - "${APP_PORT:-5000}:5000"
+       volumes:
+         - randomness_data:/randomness-source
+       env_file:
+         - .env
+       depends_on:
+         - capture
+       restart: unless-stopped
+       networks:
+         - random_network
+   
+     capture:
+       image: morveus/random-capture:latest
+       volumes:
+         - randomness_data:/randomness-source
+       env_file:
+         - .env
+       restart: unless-stopped
+       networks:
+         - random_network
+   
+   volumes:
+     randomness_data:
+       driver: local
+   
+   networks:
+     random_network:
+       driver: bridge
+   ```
+
+2. **Configure environment**:
+   Create `.env` file with your RTSP camera URL:
+   ```
+   RTSP_URL=rtsp://admin:password@your-camera-ip:554/stream
+   ```
+
+3. **Deploy**:
+   ```bash
+   docker-compose up -d
+   ```
+
+### Option 2: Build from Source
+
 1. **Clone and setup**:
    ```bash
    git clone <repository-url>
-   cd random-string-generator
+   cd random
    cp .env.example .env
    ```
 
@@ -100,6 +153,18 @@ For production, consider:
 - Adding monitoring and logging
 - Setting up automated backups
 - Configuring log rotation
+
+#### Docker Hub Deployment
+
+The images are available on Docker Hub:
+- `morveus/random-web:latest` - Web application
+- `morveus/random-capture:latest` - Snapshot capture service
+
+Pull the latest images:
+```bash
+docker pull morveus/random-web:latest
+docker pull morveus/random-capture:latest
+```
 
 ## API Endpoints
 
