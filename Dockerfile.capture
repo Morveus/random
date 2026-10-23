@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-trixie
 
 # Install system dependencies for OpenCV
 RUN apt-get update && apt-get install -y \
@@ -9,9 +9,9 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     libgstreamer1.0-0 \
     libgstreamer-plugins-base1.0-0 \
-    libavcodec59 \
-    libavformat59 \
-    libswscale6 \
+    libavcodec61 \
+    libavformat61 \
+    libswscale8 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
